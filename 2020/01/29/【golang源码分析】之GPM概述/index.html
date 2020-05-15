@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+
+
+
+
+
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 3.9.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=7.4.0">
+  <link rel="icon" type="image/png" sizes="32x32" href="/uploads/v.jpeg?v=7.4.0">
+  <link rel="icon" type="image/png" sizes="16x16" href="/uploads/v.jpeg?v=7.4.0">
+  <link rel="mask-icon" href="/images/logo.svg?v=7.4.0" color="#222">
+  <link rel="alternate" href="/atom.xml" title="Vee Zhang" type="application/atom+xml">
+
+<link rel="stylesheet" href="/css/main.css?v=7.4.0">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/font-awesome.min.css?v=4.7.0">
+
+
+<script id="hexo-configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Gemini',
+    version: '7.4.0',
+    exturl: false,
+    sidebar: {"position":"left","display":"always","offset":12,"onmobile":false},
+    copycode: {"enable":true,"show_result":true,"style":null},
+    back2top: {"enable":true,"sidebar":false,"scrollpercent":false},
+    bookmark: {"enable":false,"color":"#222","save":"auto"},
+    fancybox: false,
+    mediumzoom: false,
+    lazyload: false,
+    pangu: false,
+    algolia: {
+      appID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    },
+    localsearch: {"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},
+    path: 'search.xml',
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    translation: {
+      copy_button: '复制',
+      copy_success: '复制成功',
+      copy_failure: '复制失败'
+    },
+    sidebarPadding: 40
+  };
+</script>
+
+  <meta name="description" content="&amp;emsp;&amp;emsp;我们知道 golang 原生支持并发，goroutine 就是其设计的核心。 goroutine 是用户态线程，也就是协程。这是对内核透明的，也就是系统并不知道有协程的存在，是完全由用户自己的程序进行调度的，当然这不需要我们做什么工作，golang 已经帮我们处理了。在如今处处高并发的时代，很多库包括语言都有协程的影子。例如，腾讯的 libco 是微信后台大规模使用的c/c">
+<meta name="keywords" content="golang,源码分析">
+<meta property="og:type" content="article">
+<meta property="og:title" content="【golang源码分析】之GPM概述">
+<meta property="og:url" content="https://veezhang.github.io/2020/01/29/【golang源码分析】之GPM概述/index.html">
+<meta property="og:site_name" content="Vee Zhang">
+<meta property="og:description" content="&amp;emsp;&amp;emsp;我们知道 golang 原生支持并发，goroutine 就是其设计的核心。 goroutine 是用户态线程，也就是协程。这是对内核透明的，也就是系统并不知道有协程的存在，是完全由用户自己的程序进行调度的，当然这不需要我们做什么工作，golang 已经帮我们处理了。在如今处处高并发的时代，很多库包括语言都有协程的影子。例如，腾讯的 libco 是微信后台大规模使用的c/c">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:image" content="https://veezhang.github.io/2020/01/29/【golang源码分析】之GPM概述/GM%E6%A8%A1%E5%9E%8B.jpg">
+<meta property="og:image" content="https://veezhang.github.io/2020/01/29/【golang源码分析】之GPM概述/GPM%E6%A8%A1%E5%9E%8B.jpg">
+<meta property="og:updated_time" content="2020-05-13T05:50:25.104Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="【golang源码分析】之GPM概述">
+<meta name="twitter:description" content="&amp;emsp;&amp;emsp;我们知道 golang 原生支持并发，goroutine 就是其设计的核心。 goroutine 是用户态线程，也就是协程。这是对内核透明的，也就是系统并不知道有协程的存在，是完全由用户自己的程序进行调度的，当然这不需要我们做什么工作，golang 已经帮我们处理了。在如今处处高并发的时代，很多库包括语言都有协程的影子。例如，腾讯的 libco 是微信后台大规模使用的c/c">
+<meta name="twitter:image" content="https://veezhang.github.io/2020/01/29/【golang源码分析】之GPM概述/GM%E6%A8%A1%E5%9E%8B.jpg">
+  <link rel="canonical" href="https://veezhang.github.io/2020/01/29/【golang源码分析】之GPM概述/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome: false,
+    isPost: true,
+    isPage: false,
+    isArchive: false
+  };
+</script>
+
+  <title>【golang源码分析】之GPM概述 | Vee Zhang</title>
+  
+
+
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .logo,
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-CN">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <a href="https://github.com/veezhang" class="github-corner" aria-label="View source on GitHub"><svg width="80" height="80" viewBox="0 0 250 250" style="fill:#64CEAA; color:#fff; position: absolute; top: 0; border: 0; right: 0;" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a><style>.github-corner:hover .octo-arm{animation:octocat-wave 560ms ease-in-out}@keyframes octocat-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}@media (max-width:500px){.github-corner:hover .octo-arm{animation:none}.github-corner .octo-arm{animation:octocat-wave 560ms ease-in-out}}</style>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-meta">
+
+    <div>
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Vee Zhang</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+        <p class="site-subtitle">一个奋斗在IT界的Coder</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button aria-label="切换导航栏">
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+
+<nav class="site-nav">
+  
+  <ul id="menu" class="menu">
+      
+      
+      
+        
+        <li class="menu-item menu-item-主页">
+      
+    
+
+    <a href="/" rel="section"><i class="menu-item-icon fa fa-fw fa-home"></i> <br>主页</a>
+
+  </li>
+      
+      
+      
+        
+        <li class="menu-item menu-item-归档">
+      
+    
+
+    <a href="/archives/" rel="section"><i class="menu-item-icon fa fa-fw fa-archive"></i> <br>归档</a>
+
+  </li>
+      
+      
+      
+        
+        <li class="menu-item menu-item-分类">
+      
+    
+
+    <a href="/categories/" rel="section"><i class="menu-item-icon fa fa-fw fa-th"></i> <br>分类</a>
+
+  </li>
+      
+      
+      
+        
+        <li class="menu-item menu-item-标签">
+      
+    
+
+    <a href="/tags/" rel="section"><i class="menu-item-icon fa fa-fw fa-tags"></i> <br>标签</a>
+
+  </li>
+      
+      
+      
+        
+        <li class="menu-item menu-item-关于">
+      
+    
+
+    <a href="/about/" rel="section"><i class="menu-item-icon fa fa-fw fa-user"></i> <br>关于</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a href="javascript:;" class="popup-trigger">
+        
+          <i class="menu-item-icon fa fa-search fa-fw"></i> <br>搜索</a>
+      </li>
+    
+  </ul>
+
+</nav>
+  <div class="site-search">
+    <div class="popup search-popup">
+    <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocorrect="off" autocapitalize="none"
+           placeholder="搜索..." spellcheck="false"
+           type="text" id="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result"></div>
+
+</div>
+<div class="search-pop-overlay"></div>
+
+  </div>
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+            
+
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+      <article itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block post">
+    <link itemprop="mainEntityOfPage" href="https://veezhang.github.io/2020/01/29/【golang源码分析】之GPM概述/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Vee Zhang">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/uploads/v.jpeg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Vee Zhang">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">【golang源码分析】之GPM概述
+
+          
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              
+                
+              
+
+              <time title="创建时间：2020-01-29 09:43:31" itemprop="dateCreated datePublished" datetime="2020-01-29T09:43:31+00:00">2020-01-29</time>
+            </span>
+          
+            
+
+            
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-calendar-check-o"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2020-05-13 05:50:25" itemprop="dateModified" datetime="2020-05-13T05:50:25+00:00">2020-05-13</time>
+              </span>
+            
+          
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing"><a href="/categories/【golang源码分析】/" itemprop="url" rel="index"><span itemprop="name">【golang源码分析】</span></a></span>
+
+                
+                
+              
+            </span>
+          
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>&emsp;&emsp;我们知道 golang 原生支持并发，goroutine 就是其设计的核心。 goroutine 是用户态线程，也就是协程。这是对内核透明的，也就是系统并不知道有协程的存在，是完全由用户自己的程序进行调度的，当然这不需要我们做什么工作，golang 已经帮我们处理了。在如今处处高并发的时代，很多库包括语言都有协程的影子。例如，腾讯的 <a href="https://github.com/tencent/libco" target="_blank" rel="noopener">libco</a> 是微信后台大规模使用的c/c++协程库；lua 也是有协程的。</p><a id="more"></a>
+<h2 id="进程线程协程"><a href="#进程线程协程" class="headerlink" title="进程线程协程"></a>进程线程协程</h2><p>&emsp;&emsp;为什么要多此一举来设计协程呢？还要自己来负责调度。</p>
+<ul>
+<li>进程：分配完整独立的地址空间，拥有自己独立的堆和栈，既不共享堆，亦不共享栈，进程的切换只发生在内核态，由操作系统调度。</li>
+<li>线程：和其它本进程的线程共享地址空间，拥有自己独立的栈和共享的堆，共享堆，不共享栈，线程的切换一般也由操作系统调度(标准线程是的)。</li>
+<li>协程：和线程类似，共享堆，不共享栈，协程的切换一般由程序员在代码中显式控制。</li>
+</ul>
+<p>&emsp;&emsp;进程切换分两步：</p>
+<ol>
+<li>切换页目录以使用新的地址空间</li>
+<li>切换内核栈和硬件上下文</li>
+</ol>
+<p>&emsp;&emsp;对于linux来说，线程和进程的最大区别就在于地址空间，对于线程切换，第1步是不需要做的，第2是进程和线程切换都要做的。</p>
+<p>&emsp;&emsp;切换的性能消耗：</p>
+<ol>
+<li><p>线程上下文切换和进程上下文切换一个最主要的区别是线程的切换虚拟内存空间依然是相同的，但是进程切换是不同的。这两种上下文切换的处理都是通过操作系统内核来完成的。内核的这种切换过程伴随的最显著的性能损耗是将寄存器中的内容切换出。</p>
+</li>
+<li><p>另外一个隐藏的损耗是上下文的切换会扰乱处理器的缓存机制。简单的说，一旦去切换上下文，处理器中所有已经缓存的内存地址一瞬间都作废了。还有一个显著的区别是当你改变虚拟内存空间的时候，处理的页表缓冲（processor’s Translation Lookaside Buffer (TLB)）或者相当的神马东西会被全部刷新，这将导致内存的访问在一段时间内相当的低效。但是在线程的切换中，不会出现这个问题。</p>
+</li>
+</ol>
+<p>&emsp;&emsp;进程和线程的切换主要依赖于时间片的控制，而协程的切换则主要依赖于自身，这样的好处是避免了无意义的调度，由此可以提高性能，但也因此，程序员必须自己承担调度的责任。另外，协程一般拥有更小的创建，销毁和切换代价，以及更合理的内存分配，这也进一步提高性能。</p>
+<h2 id="Goroutine-与线程"><a href="#Goroutine-与线程" class="headerlink" title="Goroutine 与线程"></a>Goroutine 与线程</h2><p>&emsp;&emsp;我们这里从<code>内存占用</code>，<code>创建销毁</code>和<code>切换代价</code>来对比下 Goroutine 与线程，来了解轻量的 Goroutine 。</p>
+<h3 id="内存占用"><a href="#内存占用" class="headerlink" title="内存占用"></a>内存占用</h3><p>&emsp;&emsp;创建一个 goroutine 的栈内存消耗为 2KB(_StackMin = 2048)，实际运行过程中，如果栈空间不够用，会自动进行扩容，最大 1GB(maxstacksize = 1 &lt;&lt; 20) 。创建一个 thread 则默认需要消耗 8 MB (64bit系统) 栈内存，而且还需要一个被称为 “a guard page” 的区域用于和其他 thread 的栈空间进行隔离。线程的栈大小在可以 ulimit -s 查看或设置，也可以在 <code>/etc/security/limits.conf</code> 中配置，并且是固定的。而 goroutine 是动态栈，会根据需要动态地伸缩，小到 2KB 大到 1GB ，所以可以创建大量的 goroutine 。</p>
+<h3 id="创建销毁"><a href="#创建销毁" class="headerlink" title="创建销毁"></a>创建销毁</h3><p>&emsp;&emsp;Thread 创建和销毀都会有巨大的消耗，因为要和操作系统打交道，是内核级的，通常解决的办法就是线程池。而 goroutine 因为是由 Go runtime 负责管理的，创建和销毁的消耗非常小，是用户级。</p>
+<h3 id="切换代价"><a href="#切换代价" class="headerlink" title="切换代价"></a>切换代价</h3><p>线程切换大概在几微秒级别，协程切换大概在百 ns 级别。</p>
+<h4 id="Thread"><a href="#Thread" class="headerlink" title="Thread"></a>Thread</h4><p>&emsp;&emsp;线程切换过程:</p>
+<ol>
+<li>进入系统调用</li>
+<li>调度器本身代码执行</li>
+<li>线程上下文切换: PC, SP 等寄存器，栈，线程相关的一些局部变量，还涉及一些 cache miss 的情况；</li>
+<li>退出系统调用</li>
+</ol>
+<p>&emsp;&emsp;当 threads 切换时需要保存的寄存器：</p>
+<p>&emsp;&emsp;16 general purpose registers, PC (Program Counter), SP (Stack Pointer), segment registers, 16 XMM registers, FP coprocessor state, 16 AVX registers, all MSRs etc.</p>
+<h4 id="Goroutines"><a href="#Goroutines" class="headerlink" title="Goroutines"></a>Goroutines</h4><p>&emsp;&emsp;goroutines 切换只需保存三个寄存器：</p>
+<p>&emsp;&emsp;Program Counter, Stack Pointer and BP。以及一些其它的信息，在 <a href="#gobuf">gobuf 结构体中</a>。</p>
+<h2 id="早期的-GM-模型"><a href="#早期的-GM-模型" class="headerlink" title="早期的 GM 模型"></a>早期的 GM 模型</h2><p>&emsp;&emsp;在 go 1.0 版本， 只有 GM ，而没有 P ， 只有一个全局可运行队列。</p>
+<p><img src="/2020/01/29/【golang源码分析】之GPM概述/GM%E6%A8%A1%E5%9E%8B.jpg" alt="GM 模型"></p>
+<p>&emsp;&emsp;存在一些缺陷：</p>
+<ul>
+<li>调度锁的粒度，一个全局的调度锁。创建、销毁、调度 G 都需要每个M获取锁，这就形成了激烈的锁竞争。</li>
+<li>就绪的 G 被 M 取出执行的时候，并不一定是之前运行或创建 G 的那个 M ，这样线程局部性遭到破坏。</li>
+<li>系统调用(CPU在M之间的切换)导致频繁的线程阻塞和取消阻塞操作增加了系统开销。</li>
+<li>Go 内存分配类似 TCMalloc ，每个 M 都有 Thread Local Storage，每个 M 都有一些内存 cache ，只有运行的 G 的时候才需要这些 cache ，这样阻塞的 M 其实占用很大的内存。</li>
+</ul>
+<p>&emsp;&emsp;后来 Go 1.1 大神 Dmitry Vyokov 增加了 P 的概念，表示执行 G 所需的资源，当 M 和 P 绑定后才能执行 G ，比如 mcache ，本地队列等。</p>
+<h2 id="GPM-模型"><a href="#GPM-模型" class="headerlink" title="GPM 模型"></a>GPM 模型</h2><p>&emsp;&emsp;主要的概念是：</p>
+<ul>
+<li>G: Goroutine，即我们在 Go 程序中使用 go 关键字创建的执行体。</li>
+<li>M: Machine，或 worker thread，即传统意义上进程的线程；</li>
+<li>P: processor，一种执行 Go 代码被要求资源。M 必须关联一个 P 才能执行 Go 代码，但它可以被阻塞或在一个系统调用中没有关联的 P。默认为机器核数，可通过环境变量 GOMAXPROCS 设置。</li>
+</ul>
+<p><img src="/2020/01/29/【golang源码分析】之GPM概述/GPM%E6%A8%A1%E5%9E%8B.jpg" alt="GPM 模型"></p>
+<p>&emsp;&emsp;主要优化点：</p>
+<ul>
+<li>mcache 从 M 移动到 P 中。</li>
+<li>每个 P 拥有本地运行队列，新建的 G 放到本地队列，只有当本地满了再批量放入到全局队列。获取的时候优先从本地队列取。</li>
+<li>当本地队列没有 G 的时候，会从其它的地方窃取 (findrunnable() 函数)，比如：本地队列，全局队列， netpoll ， p.runnext 等。</li>
+</ul>
+<h2 id="主要结构体"><a href="#主要结构体" class="headerlink" title="主要结构体"></a>主要结构体</h2><p>&emsp;&emsp;这里涉及下主要的几个结构体。</p>
+<h3 id="G"><a href="#G" class="headerlink" title="G"></a>G</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// src/runtime/runtime2.go</span></span><br><span class="line"><span class="keyword">type</span> g <span class="keyword">struct</span> &#123;</span><br><span class="line">	<span class="comment">// Stack parameters.</span></span><br><span class="line">	<span class="comment">// stack describes the actual stack memory: [stack.lo, stack.hi).</span></span><br><span class="line">	<span class="comment">// stackguard0 is the stack pointer compared in the Go stack growth prologue.</span></span><br><span class="line">	<span class="comment">// It is stack.lo+StackGuard normally, but can be StackPreempt to trigger a preemption.</span></span><br><span class="line">	<span class="comment">// stackguard1 is the stack pointer compared in the C stack growth prologue.</span></span><br><span class="line">	<span class="comment">// It is stack.lo+StackGuard on g0 and gsignal stacks.</span></span><br><span class="line">	<span class="comment">// It is ~0 on other goroutine stacks, to trigger a call to morestackc (and crash).</span></span><br><span class="line">	<span class="comment">// Stack 参数</span></span><br><span class="line">	<span class="comment">// stack 描述了实际的栈内存：[stack.lo, stack.hi)</span></span><br><span class="line">	<span class="comment">// stackguard0 是对比 Go 栈增长的 prologue 的栈指针，如果 sp 寄存器比 stackguard0 小（由于栈往低地址方向增长），会触发栈拷贝和调度</span></span><br><span class="line">	<span class="comment">// 通常情况下：stackguard0 = stack.lo + StackGuard，但被抢占时会变为 StackPreempt。</span></span><br><span class="line">	<span class="comment">// stackguard1 是对比 C 栈增长的 prologue 的栈指针，当位于 g0 和 gsignal 栈上时，值为 stack.lo + StackGuard</span></span><br><span class="line">	<span class="comment">// 在其他栈上值为 ~0 用于触发 morestackc (并 crash) 调用</span></span><br><span class="line">	<span class="comment">//</span></span><br><span class="line">	<span class="comment">//  prologue (序言) 函数是函数开头的几行代码，它们准备了堆栈和寄存器以供在函数内使用。 epilogue (尾声) 函数出现在函数的末尾，并将堆栈和寄存器恢复到调用函数之前的状态。</span></span><br><span class="line">	<span class="comment">//  prologue/epilogue 参见：https://en.wikipedia.org/wiki/Function_prologue</span></span><br><span class="line">	<span class="comment">//</span></span><br><span class="line">	<span class="comment">// 编译器会在有栈溢出风险的函数开头加如 一些代码（也就是prologue），会比较 SP (栈寄存器,指向栈顶) 和 stackguard0，如果 SP 的值更小，说明当前 g 的栈要用完了，</span></span><br><span class="line">	<span class="comment">// 有溢出风险，需要调用 morestack_noctxt 函数来扩栈，morestack_noctxt()-&gt;morestack()-&gt;newstack() ，newstack中会处理抢占(preempt)。参见 asm_amd64.s,stack.go</span></span><br><span class="line">	stack       stack   <span class="comment">// offset known to runtime/cgo // 当前g使用的栈空间, 有lo和hi两个成员</span></span><br><span class="line">	stackguard0 <span class="keyword">uintptr</span> <span class="comment">// offset known to liblink //  stackguard0 = stack.lo + StackGuard ，检查栈空间是否足够的值, 低于这个值会扩张栈, 用于 GO 的 stack overlow的检测</span></span><br><span class="line">	stackguard1 <span class="keyword">uintptr</span> <span class="comment">// offset known to liblink //  stackguard1 = stack.lo + StackGuard ，检查栈空间是否足够的值, 低于这个值会扩张栈, 用于 C 的 stack overlow的检测</span></span><br><span class="line"></span><br><span class="line">	_panic         *_panic         <span class="comment">// innermost panic - offset known to liblink // 内部 panic ，偏移量用于 liblink</span></span><br><span class="line">	_defer         *_defer         <span class="comment">// innermost defer // 内部 defer</span></span><br><span class="line">	m              *m              <span class="comment">// current m; offset known to arm liblink // 当前 g 对应的 m ; 偏移量对 arm liblink 透明</span></span><br><span class="line">	sched          gobuf           <span class="comment">// goroutine 的现场，g 的调度数据, 当 g 中断时会保存当前的 pc 和 sp 等值到这里, 恢复运行时会使用这里的值</span></span><br><span class="line">	syscallsp      <span class="keyword">uintptr</span>         <span class="comment">// if status==Gsyscall, syscallsp = sched.sp to use during gc // 如果 status==Gsyscall, 则 syscallsp = sched.sp 并在 GC 期间使用</span></span><br><span class="line">	syscallpc      <span class="keyword">uintptr</span>         <span class="comment">// if status==Gsyscall, syscallpc = sched.pc to use during gc // 如果 status==Gsyscall, 则 syscallpc = sched.pc 并在 GC 期间使用</span></span><br><span class="line">	stktopsp       <span class="keyword">uintptr</span>         <span class="comment">// expected sp at top of stack, to check in traceback // 期望 sp 位于栈顶，用于回溯检查</span></span><br><span class="line">	param          unsafe.Pointer  <span class="comment">// passed parameter on wakeup // wakeup 唤醒时候传递的参数</span></span><br><span class="line">	atomicstatus   <span class="keyword">uint32</span>          <span class="comment">//  g 的当前状态，原子性</span></span><br><span class="line">	stackLock      <span class="keyword">uint32</span>          <span class="comment">// sigprof/scang lock; <span class="doctag">TODO:</span> fold in to atomicstatus // sigprof/scang锁，将会归入到atomicstatus</span></span><br><span class="line">	goid           <span class="keyword">int64</span>           <span class="comment">// goroutine ID</span></span><br><span class="line">	schedlink      guintptr        <span class="comment">// 下一个 g , 当 g 在链表结构中会使用</span></span><br><span class="line">	waitsince      <span class="keyword">int64</span>           <span class="comment">// approx time when the g become blocked // g 阻塞的时间</span></span><br><span class="line">	waitreason     waitReason      <span class="comment">// if status==Gwaiting // 如果 status==Gwaiting，则记录等待的原因</span></span><br><span class="line">	preempt        <span class="keyword">bool</span>            <span class="comment">// preemption signal, duplicates stackguard0 = stackpreempt // 抢占信号， g 是否被抢占中， stackguard0 = stackPreempt 的副本</span></span><br><span class="line">	paniconfault   <span class="keyword">bool</span>            <span class="comment">// panic (instead of crash) on unexpected fault address // 发生 fault panic （不崩溃）的地址</span></span><br><span class="line">	preemptscan    <span class="keyword">bool</span>            <span class="comment">// preempted g does scan for gc // 抢占式 g 会执行 GC scan</span></span><br><span class="line">	gcscandone     <span class="keyword">bool</span>            <span class="comment">// g has scanned stack; protected by _Gscan bit in status // g 执行栈已经 scan 了；此此段受 _Gscan 位保护</span></span><br><span class="line">	gcscanvalid    <span class="keyword">bool</span>            <span class="comment">// false at start of gc cycle, true if G has not run since last scan; <span class="doctag">TODO:</span> remove? // 在 gc 周期开始时为 false，如果自上次 scan 以来G没有运行，则为 true</span></span><br><span class="line">	throwsplit     <span class="keyword">bool</span>            <span class="comment">// must not split stack // 必须不能进行栈分段</span></span><br><span class="line">	raceignore     <span class="keyword">int8</span>            <span class="comment">// ignore race detection events // 忽略 race 检查事件</span></span><br><span class="line">	sysblocktraced <span class="keyword">bool</span>            <span class="comment">// StartTrace has emitted EvGoInSyscall about this goroutine //  StartTrace 已经出发了此 goroutine 的 EvGoInSyscall</span></span><br><span class="line">	sysexitticks   <span class="keyword">int64</span>           <span class="comment">// cputicks when syscall has returned (for tracing) // 当 syscall 返回时的 cputicks（用于跟踪）</span></span><br><span class="line">	traceseq       <span class="keyword">uint64</span>          <span class="comment">// trace event sequencer // 跟踪事件排序器</span></span><br><span class="line">	tracelastp     puintptr        <span class="comment">// last P emitted an event for this goroutine // 最后一个为此 goroutine 触发事件的 P</span></span><br><span class="line">	lockedm        muintptr        <span class="comment">//  g 是否要求要回到这个 M 执行, 有的时候 g 中断了恢复会要求使用原来的 M 执行</span></span><br><span class="line">	sig            <span class="keyword">uint32</span>          <span class="comment">// 信号，参见 defs_linux_arm64.go : siginfo</span></span><br><span class="line">	writebuf       []<span class="keyword">byte</span>          <span class="comment">// 写缓存</span></span><br><span class="line">	sigcode0       <span class="keyword">uintptr</span>         <span class="comment">// 参见 siginfo</span></span><br><span class="line">	sigcode1       <span class="keyword">uintptr</span>         <span class="comment">// 参见 siginfo</span></span><br><span class="line">	sigpc          <span class="keyword">uintptr</span>         <span class="comment">// 产生信号时的PC</span></span><br><span class="line">	gopc           <span class="keyword">uintptr</span>         <span class="comment">// pc of go statement that created this goroutine // 当前创建 goroutine go 语句的 pc 寄存器</span></span><br><span class="line">	ancestors      *[]ancestorInfo <span class="comment">// ancestor information goroutine(s) that created this goroutine (only used if debug.tracebackancestors) // 创建此 goroutine 的 ancestor (祖先) goroutine 的信息(debug.tracebackancestors 调试用)</span></span><br><span class="line">	startpc        <span class="keyword">uintptr</span>         <span class="comment">// pc of goroutine function // goroutine 函数的 pc 寄存器</span></span><br><span class="line">	racectx        <span class="keyword">uintptr</span>         <span class="comment">// 竟态上下文</span></span><br><span class="line">	waiting        *sudog          <span class="comment">// sudog structures this g is waiting on (that have a valid elem ptr); in lock order // 如果 g 发生阻塞（且有有效的元素指针）sudog 会将当前 g 按锁住的顺序组织起来</span></span><br><span class="line">	cgoCtxt        []<span class="keyword">uintptr</span>       <span class="comment">// cgo traceback context // cgo 回溯上下文</span></span><br><span class="line">	labels         unsafe.Pointer  <span class="comment">// profiler labels // 分析器标签</span></span><br><span class="line">	timer          *timer          <span class="comment">// cached timer for time.Sleep // 为 time.Sleep 缓存的计时器</span></span><br><span class="line">	selectDone     <span class="keyword">uint32</span>          <span class="comment">// are we participating in a select and did someone win the race? // 我们是否正在参与 select 且某个 goroutine 胜出</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// Per-G GC state</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// gcAssistBytes is this G's GC assist credit in terms of</span></span><br><span class="line">	<span class="comment">// bytes allocated. If this is positive, then the G has credit</span></span><br><span class="line">	<span class="comment">// to allocate gcAssistBytes bytes without assisting. If this</span></span><br><span class="line">	<span class="comment">// is negative, then the G must correct this by performing</span></span><br><span class="line">	<span class="comment">// scan work. We track this in bytes to make it fast to update</span></span><br><span class="line">	<span class="comment">// and check for debt in the malloc hot path. The assist ratio</span></span><br><span class="line">	<span class="comment">// determines how this corresponds to scan work debt.</span></span><br><span class="line">	<span class="comment">//  gcAssistBytes 是该 G 在分配的字节数这一方面的的 GC 辅助 credit (信誉)</span></span><br><span class="line">	<span class="comment">// 如果该值为正，则 G 已经存入了在没有 assisting 的情况下分配了 gcAssistBytes 字节，如果该值为负，则 G 必须在 scan work 中修正这个值</span></span><br><span class="line">	<span class="comment">// 我们以字节为单位进行追踪，一遍快速更新并检查 malloc 热路径中分配的债务（分配的字节）。assist ratio 决定了它与 scan work 债务的对应关系</span></span><br><span class="line">	gcAssistBytes <span class="keyword">int64</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="P"><a href="#P" class="headerlink" title="P"></a>P</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// src/runtime/runtime2.go</span></span><br><span class="line"><span class="keyword">type</span> p <span class="keyword">struct</span> &#123;</span><br><span class="line">	lock mutex <span class="comment">// 锁</span></span><br><span class="line"></span><br><span class="line">	id          <span class="keyword">int32</span>      <span class="comment">// ID</span></span><br><span class="line">	status      <span class="keyword">uint32</span>     <span class="comment">// one of pidle/prunning/... // 状态</span></span><br><span class="line">	link        puintptr   <span class="comment">// p 的链表</span></span><br><span class="line">	schedtick   <span class="keyword">uint32</span>     <span class="comment">// incremented on every scheduler call // 每次调度程序调用时增加</span></span><br><span class="line">	syscalltick <span class="keyword">uint32</span>     <span class="comment">// incremented on every system call // 每次系统调用时增加</span></span><br><span class="line">	sysmontick  sysmontick <span class="comment">// last tick observed by sysmon // sysmon观察到的最后一个tick，会记录</span></span><br><span class="line">	m           muintptr   <span class="comment">// back-link to associated m (nil if idle) // 反向链接到相关的M（如果空闲则为nil）</span></span><br><span class="line">	mcache      *mcache    <span class="comment">// mcache: 每个P的内存缓存，不需要加锁</span></span><br><span class="line">	racectx     <span class="keyword">uintptr</span>    <span class="comment">// 竟态上下文</span></span><br><span class="line"></span><br><span class="line">	deferpool    [<span class="number">5</span>][]*_defer <span class="comment">// pool of available defer structs of different sizes (see panic.go) // defer池，拥有不同的尺寸</span></span><br><span class="line">	deferpoolbuf [<span class="number">5</span>][<span class="number">32</span>]*_defer</span><br><span class="line"></span><br><span class="line">	<span class="comment">// Cache of goroutine ids, amortizes accesses to runtime·sched.goidgen.</span></span><br><span class="line">	<span class="comment">// goroutine ID的缓存将分摊对runtime.sched.goidgen的访问。</span></span><br><span class="line">	goidcache    <span class="keyword">uint64</span></span><br><span class="line">	goidcacheend <span class="keyword">uint64</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// Queue of runnable goroutines. Accessed without lock.</span></span><br><span class="line">	<span class="comment">// 可运行goroutine队列。 无锁访问。</span></span><br><span class="line">	<span class="comment">//  runqhead 和 runqtail 都是 uint32 ，不用担心越界问题，超过最大值之后，会变为 0 ，并且 0 - ^uint32(0) = 1 ，也就是说取长度也不会有问题。</span></span><br><span class="line">	runqhead <span class="keyword">uint32</span>        <span class="comment">// 队头，runqhead 在后头跟，指向第一个可以使用，应该从这里取出</span></span><br><span class="line">	runqtail <span class="keyword">uint32</span>        <span class="comment">// 队尾，runqtail 在队列前面走，指向第一个空槽，应该插入到这里</span></span><br><span class="line">	runq     [<span class="number">256</span>]guintptr <span class="comment">// 运行队列</span></span><br><span class="line">	<span class="comment">// runnext, if non-nil, is a runnable G that was ready'd by</span></span><br><span class="line">	<span class="comment">// the current G and should be run next instead of what's in</span></span><br><span class="line">	<span class="comment">// runq if there's time remaining in the running G's time</span></span><br><span class="line">	<span class="comment">// slice. It will inherit the time left in the current time</span></span><br><span class="line">	<span class="comment">// slice. If a set of goroutines is locked in a</span></span><br><span class="line">	<span class="comment">// communicate-and-wait pattern, this schedules that set as a</span></span><br><span class="line">	<span class="comment">// unit and eliminates the (potentially large) scheduling</span></span><br><span class="line">	<span class="comment">// latency that otherwise arises from adding the ready'd</span></span><br><span class="line">	<span class="comment">// goroutines to the end of the run queue.</span></span><br><span class="line">	<span class="comment">// runnext（如果不是nil）是当前G准备好的可运行G，如果正在运行的G的时间片中还有剩余时间，则应在下一个运行，而不是在runq中的G来运行。</span></span><br><span class="line">	<span class="comment">// 它将继承当前时间片中剩余的时间。如果将一组goroutine锁定为“通信等待”模式，则将其设置为一个单元进行调度，并消除了（可能较大的）调度</span></span><br><span class="line">	<span class="comment">// 延迟，而这种延迟可能是由于将就绪的goroutine添加到运行队列的末尾而引起的。</span></span><br><span class="line">	runnext guintptr</span><br><span class="line"></span><br><span class="line">	<span class="comment">// Available G's (status == Gdead)</span></span><br><span class="line">	<span class="comment">// 可用的G，状态为Gdead</span></span><br><span class="line">	gFree <span class="keyword">struct</span> &#123;</span><br><span class="line">		gList</span><br><span class="line">		n <span class="keyword">int32</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	sudogcache []*sudog <span class="comment">// sudog缓存，初始化为： sudogbuf[:0]</span></span><br><span class="line">	sudogbuf   [<span class="number">128</span>]*sudog</span><br><span class="line"></span><br><span class="line">	tracebuf traceBufPtr <span class="comment">// trace缓存，64Kb</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// traceSweep indicates the sweep events should be traced.</span></span><br><span class="line">	<span class="comment">// This is used to defer the sweep start event until a span</span></span><br><span class="line">	<span class="comment">// has actually been swept.</span></span><br><span class="line">	<span class="comment">// traceSweep指示清扫事件是否被trace。这用于推迟清扫开始事件，直到实际扫过一个span为止。</span></span><br><span class="line">	traceSweep <span class="keyword">bool</span></span><br><span class="line">	<span class="comment">// traceSwept and traceReclaimed track the number of bytes</span></span><br><span class="line">	<span class="comment">// swept and reclaimed by sweeping in the current sweep loop.</span></span><br><span class="line">	<span class="comment">// traceSwept和traceReclaimed跟踪通过在当前清扫循环中进行清扫来清除和回收的字节数。</span></span><br><span class="line">	traceSwept, traceReclaimed <span class="keyword">uintptr</span></span><br><span class="line"></span><br><span class="line">	palloc persistentAlloc <span class="comment">// per-P to avoid mutex // 分配器，每个P一个，避免加锁</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// Per-P GC state</span></span><br><span class="line">	<span class="comment">// 每个P的GC状态</span></span><br><span class="line">	gcAssistTime         <span class="keyword">int64</span>            <span class="comment">// Nanoseconds in assistAlloc // gcAassistAlloc中计时</span></span><br><span class="line">	gcFractionalMarkTime <span class="keyword">int64</span>            <span class="comment">// Nanoseconds in fractional mark worker // GC Mark计时</span></span><br><span class="line">	gcBgMarkWorker       guintptr         <span class="comment">// 标记G</span></span><br><span class="line">	gcMarkWorkerMode     gcMarkWorkerMode <span class="comment">// 标记模式</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// gcMarkWorkerStartTime is the nanotime() at which this mark</span></span><br><span class="line">	<span class="comment">// worker started.</span></span><br><span class="line">	gcMarkWorkerStartTime <span class="keyword">int64</span> <span class="comment">// mark worker启动时间</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// gcw is this P's GC work buffer cache. The work buffer is</span></span><br><span class="line">	<span class="comment">// filled by write barriers, drained by mutator assists, and</span></span><br><span class="line">	<span class="comment">// disposed on certain GC state transitions.</span></span><br><span class="line">	<span class="comment">// gcw是此P的GC工作缓冲区高速缓存。工作缓冲区由写屏障填充，由辅助mutator(赋值器)耗尽，并放置在某些GC状态转换上。</span></span><br><span class="line">	gcw gcWork <span class="comment">//  GC 的本地工作队列，灰色对象管理</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// wbBuf is this P's GC write barrier buffer.</span></span><br><span class="line">	<span class="comment">//</span></span><br><span class="line">	<span class="comment">// <span class="doctag">TODO:</span> Consider caching this in the running G.</span></span><br><span class="line">	<span class="comment">// wbBuf 是当前 P 的 GC 的 write barrier 缓存</span></span><br><span class="line">	wbBuf wbBuf</span><br><span class="line"></span><br><span class="line">	runSafePointFn <span class="keyword">uint32</span> <span class="comment">// if 1, run sched.safePointFn at next safe point // 如果为 1, 则在下一个 safe-point 运行 sched.safePointFn</span></span><br><span class="line"></span><br><span class="line">	pad cpu.CacheLinePad</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="gobuf"><a href="#gobuf" class="headerlink" title="gobuf"></a>gobuf</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// src/runtime/runtime2.go</span></span><br><span class="line"><span class="comment">// gobuf记录与协程切换相关信息</span></span><br><span class="line"><span class="keyword">type</span> gobuf <span class="keyword">struct</span> &#123;</span><br><span class="line">	sp   <span class="keyword">uintptr</span>        <span class="comment">// sp 寄存器</span></span><br><span class="line">	pc   <span class="keyword">uintptr</span>        <span class="comment">// pc 寄存器</span></span><br><span class="line">	g    guintptr       <span class="comment">// g 指针</span></span><br><span class="line">	ctxt unsafe.Pointer <span class="comment">// 这个似乎是用来辅助 gc 的</span></span><br><span class="line">	ret  sys.Uintreg    <span class="comment">// 作用 ？ panic.go 中 recovery 函数有设置为 1</span></span><br><span class="line">	lr   <span class="keyword">uintptr</span>        <span class="comment">// 这是在 arm 上用的寄存器，不用关心</span></span><br><span class="line">	bp   <span class="keyword">uintptr</span>        <span class="comment">// for GOEXPERIMENT=framepointer // 开启 GOEXPERIMENT=framepointer ，才会有这个</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="M"><a href="#M" class="headerlink" title="M"></a>M</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// src/runtime/runtime2.go</span></span><br><span class="line"><span class="keyword">type</span> m <span class="keyword">struct</span> &#123;</span><br><span class="line">	g0      *g     <span class="comment">// goroutine with scheduling stack // 用于执行调度指令的 goroutine， 用于调度的特殊 g , 调度和执行系统调用时会切换到这个 g</span></span><br><span class="line">	morebuf gobuf  <span class="comment">// gobuf arg to morestack //  morestack 的 gobuf 参数</span></span><br><span class="line">	divmod  <span class="keyword">uint32</span> <span class="comment">// div/mod denominator for arm - known to liblink</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// Fields not known to debuggers.</span></span><br><span class="line">	<span class="comment">// debugger 不知道的字段</span></span><br><span class="line">	procid        <span class="keyword">uint64</span>         <span class="comment">// for debuggers, but offset not hard-coded // 用于 debugger，偏移量不是写死的</span></span><br><span class="line">	gsignal       *g             <span class="comment">// signal-handling g // 用于 debugger，偏移量不是写死的</span></span><br><span class="line">	goSigStack    gsignalStack   <span class="comment">// Go-allocated signal handling stack // Go 分配的 signal handling 栈</span></span><br><span class="line">	sigmask       sigset         <span class="comment">// storage for saved signal mask // 用于保存 saved signal mask</span></span><br><span class="line">	tls           [<span class="number">6</span>]<span class="keyword">uintptr</span>     <span class="comment">// thread-local storage (for x86 extern register) // thread-local storage (对 x86 而言为额外的寄存器)</span></span><br><span class="line">	mstartfn      <span class="function"><span class="keyword">func</span><span class="params">()</span>         // <span class="title">M</span>启动函数</span></span><br><span class="line"><span class="function">	<span class="title">curg</span>          *<span class="title">g</span>             // <span class="title">current</span> <span class="title">running</span> <span class="title">goroutine</span> // 当前运行的用户 <span class="title">g</span></span></span><br><span class="line"><span class="function">	<span class="title">caughtsig</span>     <span class="title">guintptr</span>       // <span class="title">goroutine</span> <span class="title">running</span> <span class="title">during</span> <span class="title">fatal</span> <span class="title">signal</span> // <span class="title">goroutine</span> 在 <span class="title">fatal</span> <span class="title">signal</span> 中运行</span></span><br><span class="line"><span class="function">	<span class="title">p</span>             <span class="title">puintptr</span>       // <span class="title">attached</span> <span class="title">p</span> <span class="title">for</span> <span class="title">executing</span> <span class="title">go</span> <span class="title">code</span> <span class="params">(<span class="literal">nil</span> <span class="keyword">if</span> not executing <span class="keyword">go</span> code)</span> // 执行 <span class="title">go</span> 代码时持有的 <span class="title">p</span> <span class="params">(如果没有执行则为 <span class="literal">nil</span>)</span></span></span><br><span class="line"><span class="function">	<span class="title">nextp</span>         <span class="title">puintptr</span>       // 下一个<span class="title">p</span>， 唤醒 <span class="title">M</span> 时,  <span class="title">M</span> 会拥有这个 <span class="title">P</span></span></span><br><span class="line"><span class="function">	<span class="title">oldp</span>          <span class="title">puintptr</span>       // <span class="title">the</span> <span class="title">p</span> <span class="title">that</span> <span class="title">was</span> <span class="title">attached</span> <span class="title">before</span> <span class="title">executing</span> <span class="title">a</span> <span class="title">syscall</span> // 执行系统调用之前绑定的 <span class="title">p</span></span></span><br><span class="line"><span class="function">	<span class="title">id</span>            <span class="title">int64</span>          // <span class="title">ID</span></span></span><br><span class="line"><span class="function">	<span class="title">mallocing</span>     <span class="title">int32</span>          // 是否正在分配内存</span></span><br><span class="line"><span class="function">	<span class="title">throwing</span>      <span class="title">int32</span>          // 是否正在抛出异常</span></span><br><span class="line"><span class="function">	<span class="title">preemptoff</span>    <span class="title">string</span>         // <span class="title">if</span> != "", <span class="title">keep</span> <span class="title">curg</span> <span class="title">running</span> <span class="title">on</span> <span class="title">this</span> <span class="title">m</span> // 如果不为空串 ""，继续让当前 <span class="title">g</span> 运行在该 <span class="title">M</span> 上</span></span><br><span class="line"><span class="function">	<span class="title">locks</span>         <span class="title">int32</span>          // <span class="title">M</span>的锁</span></span><br><span class="line"><span class="function">	<span class="title">dying</span>         <span class="title">int32</span>          // 是否正在死亡，参见<span class="title">startpanic_m</span></span></span><br><span class="line"><span class="function">	<span class="title">profilehz</span>     <span class="title">int32</span>          // <span class="title">cpu</span> <span class="title">profiling</span> <span class="title">rate</span></span></span><br><span class="line"><span class="function">	<span class="title">spinning</span>      <span class="title">bool</span>           // <span class="title">m</span> <span class="title">is</span> <span class="title">out</span> <span class="title">of</span> <span class="title">work</span> <span class="title">and</span> <span class="title">is</span> <span class="title">actively</span> <span class="title">looking</span> <span class="title">for</span> <span class="title">work</span> // <span class="title">m</span> 当前没有运行 <span class="title">work</span> 且正处于寻找 <span class="title">work</span> 的活跃状态</span></span><br><span class="line"><span class="function">	<span class="title">blocked</span>       <span class="title">bool</span>           // <span class="title">m</span> <span class="title">is</span> <span class="title">blocked</span> <span class="title">on</span> <span class="title">a</span> <span class="title">note</span> // <span class="title">m</span> 阻塞在一个 <span class="title">note</span> 上</span></span><br><span class="line"><span class="function">	<span class="title">inwb</span>          <span class="title">bool</span>           // <span class="title">m</span> <span class="title">is</span> <span class="title">executing</span> <span class="title">a</span> <span class="title">write</span> <span class="title">barrier</span> // <span class="title">m</span> 在执行<span class="title">write</span> <span class="title">barrier</span></span></span><br><span class="line"><span class="function">	<span class="title">newSigstack</span>   <span class="title">bool</span>           // <span class="title">minit</span> <span class="title">on</span> <span class="title">C</span> <span class="title">thread</span> <span class="title">called</span> <span class="title">sigaltstack</span> // <span class="title">C</span> 线程上的 <span class="title">minit</span> 是否调用了 <span class="title">signalstack</span></span></span><br><span class="line"><span class="function">	<span class="title">printlock</span>     <span class="title">int8</span>           // <span class="title">print</span> 锁，参见 <span class="title">print</span>.<span class="title">go</span> <span class="title">printlock</span>/<span class="title">printunlock</span></span></span><br><span class="line"><span class="function">	<span class="title">incgo</span>         <span class="title">bool</span>           // <span class="title">m</span> <span class="title">is</span> <span class="title">executing</span> <span class="title">a</span> <span class="title">cgo</span> <span class="title">call</span> // <span class="title">m</span> 正在执行 <span class="title">cgo</span> 调用</span></span><br><span class="line"><span class="function">	<span class="title">freeWait</span>      <span class="title">uint32</span>         // <span class="title">if</span> == 0, <span class="title">safe</span> <span class="title">to</span> <span class="title">free</span> <span class="title">g0</span> <span class="title">and</span> <span class="title">delete</span> <span class="title">m</span> <span class="params">(atomic)</span> // 如果为 0，安全的释放 <span class="title">g0</span> 并删除 <span class="title">m</span> <span class="params">(原子操作)</span></span></span><br><span class="line"><span class="function">	<span class="title">fastrand</span>      [2]<span class="title">uint32</span>      // 快速随机</span></span><br><span class="line"><span class="function">	<span class="title">needextram</span>    <span class="title">bool</span>           // 需要额外的 <span class="title">m</span></span></span><br><span class="line"><span class="function">	<span class="title">traceback</span>     <span class="title">uint8</span>          // 回溯</span></span><br><span class="line"><span class="function">	<span class="title">ncgocall</span>      <span class="title">uint64</span>         // <span class="title">number</span> <span class="title">of</span> <span class="title">cgo</span> <span class="title">calls</span> <span class="title">in</span> <span class="title">total</span> // 总共的 <span class="title">cgo</span> 调用数</span></span><br><span class="line"><span class="function">	<span class="title">ncgo</span>          <span class="title">int32</span>          // <span class="title">number</span> <span class="title">of</span> <span class="title">cgo</span> <span class="title">calls</span> <span class="title">currently</span> <span class="title">in</span> <span class="title">progress</span> // 正在进行的 <span class="title">cgo</span> 调用数</span></span><br><span class="line"><span class="function">	<span class="title">cgoCallersUse</span> <span class="title">uint32</span>         // <span class="title">if</span> <span class="title">non</span>-<span class="title">zero</span>, <span class="title">cgoCallers</span> <span class="title">in</span> <span class="title">use</span> <span class="title">temporarily</span> // 如果非零，则表示 <span class="title">cgoCaller</span> 正在临时使用</span></span><br><span class="line"><span class="function">	<span class="title">cgoCallers</span>    *<span class="title">cgoCallers</span>    // <span class="title">cgo</span> <span class="title">traceback</span> <span class="title">if</span> <span class="title">crashing</span> <span class="title">in</span> <span class="title">cgo</span> <span class="title">call</span> // <span class="title">cgo</span> 调用崩溃的 <span class="title">cgo</span> 回溯</span></span><br><span class="line"><span class="function">	<span class="title">park</span>          <span class="title">note</span>           //  <span class="title">M</span> 休眠时使用的信号量, 唤醒 <span class="title">M</span> 时会通过它唤醒</span></span><br><span class="line"><span class="function">	<span class="title">alllink</span>       *<span class="title">m</span>             // <span class="title">on</span> <span class="title">allm</span> // 在 <span class="title">allm</span> 上，将所有的 <span class="title">m</span> 链接起来</span></span><br><span class="line"><span class="function">	<span class="title">schedlink</span>     <span class="title">muintptr</span>       // 下一个 <span class="title">m</span> , 当 <span class="title">m</span> 在链表结构中会使用</span></span><br><span class="line"><span class="function">	<span class="title">mcache</span>        *<span class="title">mcache</span>        // 分配内存时使用的本地分配器, 和 <span class="title">p</span>.<span class="title">mcache</span> 一样<span class="params">(拥有 P 时会复制过来)</span></span></span><br><span class="line"><span class="function">	<span class="title">lockedg</span>       <span class="title">guintptr</span>       // 表示与当前 <span class="title">M</span> 锁定的那个 <span class="title">G</span> 。运行时系统会把 一个 <span class="title">M</span> 和一个 <span class="title">G</span> 锁定，一旦锁定就只能双方相互作用，不接受第三者。<span class="title">g</span>.<span class="title">lockedm</span> 的对应值</span></span><br><span class="line"><span class="function">	<span class="title">createstack</span>   [32]<span class="title">uintptr</span>    // <span class="title">stack</span> <span class="title">that</span> <span class="title">created</span> <span class="title">this</span> <span class="title">thread</span>.// 当前线程创建的栈</span></span><br><span class="line"><span class="function">	<span class="title">lockedExt</span>     <span class="title">uint32</span>         // <span class="title">tracking</span> <span class="title">for</span> <span class="title">external</span> <span class="title">LockOSThread</span> // 外部 <span class="title">LockOSThread</span> 追踪，<span class="title">LockOSThread</span>/<span class="title">UnlockOSThread</span></span></span><br><span class="line"><span class="function">	<span class="title">lockedInt</span>     <span class="title">uint32</span>         // <span class="title">tracking</span> <span class="title">for</span> <span class="title">internal</span> <span class="title">lockOSThread</span> // 内部 <span class="title">lockOSThread</span> 追踪，<span class="title">lockOSThread</span>/<span class="title">unlockOSThread</span></span></span><br><span class="line"><span class="function">	<span class="title">nextwaitm</span>     <span class="title">muintptr</span>       // <span class="title">next</span> <span class="title">m</span> <span class="title">waiting</span> <span class="title">for</span> <span class="title">lock</span> // 内部 <span class="title">lockOSThread</span> 追踪</span></span><br><span class="line"><span class="function">	<span class="title">waitunlockf</span>   <span class="title">unsafe</span>.<span class="title">Pointer</span> // <span class="title">todo</span> <span class="title">go</span> <span class="title">func</span><span class="params">(*g, unsafe.pointer)</span> <span class="title">bool</span> // 参见<span class="title">proc</span>.<span class="title">go</span> <span class="title">gopark</span></span></span><br><span class="line"><span class="function">	<span class="title">waitlock</span>      <span class="title">unsafe</span>.<span class="title">Pointer</span> // 参见<span class="title">proc</span>.<span class="title">go</span> <span class="title">gopark</span></span></span><br><span class="line"><span class="function">	<span class="title">waittraceev</span>   <span class="title">byte</span>           // 参见<span class="title">proc</span>.<span class="title">go</span> <span class="title">gopark</span></span></span><br><span class="line"><span class="function">	<span class="title">waittraceskip</span> <span class="title">int</span>            // 参见<span class="title">proc</span>.<span class="title">go</span> <span class="title">gopark</span></span></span><br><span class="line"><span class="function">	<span class="title">startingtrace</span> <span class="title">bool</span>           // 开始<span class="title">trace</span>，见<span class="title">trace</span>.<span class="title">go</span> <span class="title">StartTrace</span></span></span><br><span class="line"><span class="function">	<span class="title">syscalltick</span>   <span class="title">uint32</span>         // 每次系统调用时增加</span></span><br><span class="line"><span class="function">	<span class="title">thread</span>        <span class="title">uintptr</span>        // <span class="title">thread</span> <span class="title">handle</span> // 线程句柄</span></span><br><span class="line"><span class="function">	<span class="title">freelink</span>      *<span class="title">m</span>             // <span class="title">on</span> <span class="title">sched</span>.<span class="title">freem</span> // 在 <span class="title">sched</span>.<span class="title">freem</span> 上</span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function">	// <span class="title">these</span> <span class="title">are</span> <span class="title">here</span> <span class="title">because</span> <span class="title">they</span> <span class="title">are</span> <span class="title">too</span> <span class="title">large</span> <span class="title">to</span> <span class="title">be</span> <span class="title">on</span> <span class="title">the</span> <span class="title">stack</span></span></span><br><span class="line"><span class="function">	// <span class="title">of</span> <span class="title">low</span>-<span class="title">level</span> <span class="title">NOSPLIT</span> <span class="title">functions</span>.</span></span><br><span class="line"><span class="function">	// 下面这些字段因为它们太大而不能放在低级的 <span class="title">NOSPLIT</span> 函数的堆栈上。</span></span><br><span class="line"><span class="function">	<span class="title">libcall</span>   <span class="title">libcall</span>  // 调用信息</span></span><br><span class="line"><span class="function">	<span class="title">libcallpc</span> <span class="title">uintptr</span>  // <span class="title">for</span> <span class="title">cpu</span> <span class="title">profiler</span> // 用于 <span class="title">cpu</span> <span class="title">profiler</span></span></span><br><span class="line"><span class="function">	<span class="title">libcallsp</span> <span class="title">uintptr</span>  // <span class="title">libcall</span> <span class="title">SP</span></span></span><br><span class="line"><span class="function">	<span class="title">libcallg</span>  <span class="title">guintptr</span> // <span class="title">libcall</span> <span class="title">G</span></span></span><br><span class="line"><span class="function">	<span class="title">syscall</span>   <span class="title">libcall</span>  // <span class="title">stores</span> <span class="title">syscall</span> <span class="title">parameters</span> <span class="title">on</span> <span class="title">windows</span> // 存储 <span class="title">windows</span> 上系统调用的参数</span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function">	<span class="title">vdsoSP</span> <span class="title">uintptr</span> // <span class="title">SP</span> <span class="title">for</span> <span class="title">traceback</span> <span class="title">while</span> <span class="title">in</span> <span class="title">VDSO</span> <span class="title">call</span> <span class="params">(0 <span class="keyword">if</span> not in call)</span></span></span><br><span class="line"><span class="function">	<span class="title">vdsoPC</span> <span class="title">uintptr</span> // <span class="title">PC</span> <span class="title">for</span> <span class="title">traceback</span> <span class="title">while</span> <span class="title">in</span> <span class="title">VDSO</span> <span class="title">call</span></span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function">	<span class="title">mOS</span></span></span><br><span class="line"><span class="function">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="schedt"><a href="#schedt" class="headerlink" title="schedt"></a>schedt</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// src/runtime/runtime2.go</span></span><br><span class="line"><span class="keyword">type</span> schedt <span class="keyword">struct</span> &#123;</span><br><span class="line">	<span class="comment">// accessed atomically. keep at top to ensure alignment on 32-bit systems.</span></span><br><span class="line">	<span class="comment">// 原子访问，放到顶部，确保在32位系统上对齐（8字节）。</span></span><br><span class="line">	goidgen  <span class="keyword">uint64</span> <span class="comment">// go runtime ID生成器，原子自增，在newproc1和oneNewExtraM中使用了</span></span><br><span class="line">	lastpoll <span class="keyword">uint64</span> <span class="comment">// 上一次轮询的时间（nanotime）</span></span><br><span class="line"></span><br><span class="line">	lock mutex <span class="comment">// 锁</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// When increasing nmidle, nmidlelocked, nmsys, or nmfreed, be</span></span><br><span class="line">	<span class="comment">// sure to call checkdead().</span></span><br><span class="line">	<span class="comment">// 当增加nmidle，nmidlelocked，nmsys或nmfreed时，请确保调用checkdead()。</span></span><br><span class="line"></span><br><span class="line">	midle        muintptr <span class="comment">// idle m's waiting for work // 空闲的 M 队列</span></span><br><span class="line">	nmidle       <span class="keyword">int32</span>    <span class="comment">// number of idle m's waiting for work // 当前等待工作的空闲 M 计数</span></span><br><span class="line">	nmidlelocked <span class="keyword">int32</span>    <span class="comment">// number of locked m's waiting for work // 当前等待工作的被 lock 的 M 计数</span></span><br><span class="line">	mnext        <span class="keyword">int64</span>    <span class="comment">// number of m's that have been created and next M ID // 已经被创建的 M 的数量，下一个 M 的 ID</span></span><br><span class="line">	maxmcount    <span class="keyword">int32</span>    <span class="comment">// maximum number of m's allowed (or die) // 最大M的数量</span></span><br><span class="line">	nmsys        <span class="keyword">int32</span>    <span class="comment">// number of system m's not counted for deadlock // 系统 M 的数量， 在 deadlock 中不计数</span></span><br><span class="line">	nmfreed      <span class="keyword">int64</span>    <span class="comment">// cumulative number of freed m's	// 释放的 M 的累计数量</span></span><br><span class="line"></span><br><span class="line">	ngsys <span class="keyword">uint32</span> <span class="comment">// number of system goroutines; updated atomically // 系统调用 goroutine 的数量，原子更新</span></span><br><span class="line"></span><br><span class="line">	pidle      puintptr <span class="comment">// idle p's // 空闲的P</span></span><br><span class="line">	npidle     <span class="keyword">uint32</span>   <span class="comment">// 空闲的P的数目</span></span><br><span class="line">	nmspinning <span class="keyword">uint32</span>   <span class="comment">// See "Worker thread parking/unparking" comment in proc.go. // 处于spinning的M的数目</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// Global runnable queue.</span></span><br><span class="line">	runq     gQueue <span class="comment">// 全局的 G 运行队列</span></span><br><span class="line">	runqsize <span class="keyword">int32</span>  <span class="comment">// 全局的 G 运行队列大小</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// disable controls selective disabling of the scheduler.</span></span><br><span class="line">	<span class="comment">//</span></span><br><span class="line">	<span class="comment">// Use schedEnableUser to control this.</span></span><br><span class="line">	<span class="comment">//</span></span><br><span class="line">	<span class="comment">// disable is protected by sched.lock.</span></span><br><span class="line">	<span class="comment">// disable控制选择性禁用调度程序。使用schedEnableUser进行控制。受sched.lock保护。</span></span><br><span class="line">	disable <span class="keyword">struct</span> &#123;</span><br><span class="line">		<span class="comment">// user disables scheduling of user goroutines.</span></span><br><span class="line">		user     <span class="keyword">bool</span>   <span class="comment">// 用户禁用用户的goroutines调度</span></span><br><span class="line">		runnable gQueue <span class="comment">// pending runnable Gs // 等待的可运行的G队列</span></span><br><span class="line">		n        <span class="keyword">int32</span>  <span class="comment">// length of runnable // runnable的长度</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// Global cache of dead G's.</span></span><br><span class="line">	<span class="comment">// dead G全局缓存，已退出的 goroutine 对象缓存下来，避免每次创建 goroutine 时都重新分配内存，可参考proc.go中的gfput,gfget</span></span><br><span class="line">	gFree <span class="keyword">struct</span> &#123;</span><br><span class="line">		lock    mutex <span class="comment">// 锁</span></span><br><span class="line">		stack   gList <span class="comment">// Gs with stacks // 有堆栈的G</span></span><br><span class="line">		noStack gList <span class="comment">// Gs without stacks // 没有堆栈的G</span></span><br><span class="line">		n       <span class="keyword">int32</span> <span class="comment">// stack和noStack中的总数</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// Central cache of sudog structs.</span></span><br><span class="line">	sudoglock  mutex  <span class="comment">// sudog缓存的锁</span></span><br><span class="line">	sudogcache *sudog <span class="comment">// sudog缓存</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// Central pool of available defer structs of different sizes.</span></span><br><span class="line">	deferlock mutex      <span class="comment">// defer缓存的锁</span></span><br><span class="line">	deferpool [<span class="number">5</span>]*_defer <span class="comment">// defer缓存</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// freem is the list of m's waiting to be freed when their</span></span><br><span class="line">	<span class="comment">// m.exited is set. Linked through m.freelink.</span></span><br><span class="line">	freem *m <span class="comment">// freem是设置 m.exited 时等待释放的 m 列表。通过 m.freelink 链接。</span></span><br><span class="line"></span><br><span class="line">	gcwaiting  <span class="keyword">uint32</span> <span class="comment">// gc is waiting to run // GC等待运行</span></span><br><span class="line">	stopwait   <span class="keyword">int32</span>  <span class="comment">// 需要停止P的数目</span></span><br><span class="line">	stopnote   note   <span class="comment">// stopwait睡眠唤醒事件</span></span><br><span class="line">	sysmonwait <span class="keyword">uint32</span> <span class="comment">// 等待系统监控</span></span><br><span class="line">	sysmonnote note   <span class="comment">// sysmonwait睡眠唤醒事件</span></span><br><span class="line"></span><br><span class="line">	<span class="comment">// safepointFn should be called on each P at the next GC</span></span><br><span class="line">	<span class="comment">// safepoint if p.runSafePointFn is set.</span></span><br><span class="line">	<span class="comment">// 如果设置了p.runSafePointFn，则应在下一个GC安全点的每个P上调用safepointFn。</span></span><br><span class="line">	safePointFn   <span class="function"><span class="keyword">func</span><span class="params">(*p)</span> // 安全点函数</span></span><br><span class="line"><span class="function">	<span class="title">safePointWait</span> <span class="title">int32</span>    // 等待<span class="title">safePointFn</span>执行</span></span><br><span class="line"><span class="function">	<span class="title">safePointNote</span> <span class="title">note</span>     // <span class="title">safePointWait</span>睡眠唤醒事件</span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function">	<span class="title">profilehz</span> <span class="title">int32</span> // <span class="title">cpu</span> <span class="title">profiling</span> <span class="title">rate</span> // <span class="title">CPU</span></span></span><br><span class="line"><span class="function"></span></span><br><span class="line"><span class="function">	<span class="title">procresizetime</span> <span class="title">int64</span> // <span class="title">nanotime</span><span class="params">()</span> <span class="title">of</span> <span class="title">last</span> <span class="title">change</span> <span class="title">to</span> <span class="title">gomaxprocs</span> // 上一次修改<span class="title">gomaxprocs</span>的时间，参见<span class="title">proc</span>.<span class="title">go</span>中的<span class="title">procresize</span></span></span><br><span class="line"><span class="function">	<span class="title">totaltime</span>      <span class="title">int64</span> // ∫<span class="title">gomaxprocs</span> <span class="title">dt</span> <span class="title">up</span> <span class="title">to</span> <span class="title">procresizetime</span> // 总时间</span></span><br><span class="line"><span class="function">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="Global-objects"><a href="#Global-objects" class="headerlink" title="Global objects"></a>Global objects</h3><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// src/runtime/runtime2.go</span></span><br><span class="line"><span class="comment">// 全局的一些对象</span></span><br><span class="line"><span class="keyword">var</span> (</span><br><span class="line">	allglen    <span class="keyword">uintptr</span>      <span class="comment">// 所有G的数目</span></span><br><span class="line">	allm       *m           <span class="comment">// 所有的M</span></span><br><span class="line">	allp       []*p         <span class="comment">// len(allp) == gomaxprocs; may change at safe points, otherwise immutable // 可能在安全区更改，否则不变</span></span><br><span class="line">	allpLock   mutex        <span class="comment">// Protects P-less reads of allp and all writes // allp的锁</span></span><br><span class="line">	gomaxprocs <span class="keyword">int32</span>        <span class="comment">// GOMAXPROCS</span></span><br><span class="line">	ncpu       <span class="keyword">int32</span>        <span class="comment">// CPU数目</span></span><br><span class="line">	forcegc    forcegcstate <span class="comment">// 强制GC</span></span><br><span class="line">	sched      schedt       <span class="comment">// 调度</span></span><br><span class="line">	newprocs   <span class="keyword">int32</span>        <span class="comment">// GOMAXPROCS函数设置，startTheWorld处理</span></span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// src/runtime/proc.go</span></span><br><span class="line"><span class="keyword">var</span> (</span><br><span class="line">	m0           m <span class="comment">// 主M，asm_amd64.s中runtime·rt0_go初始化</span></span><br><span class="line">	g0           g <span class="comment">// 主G，asm_amd64.s中runtime·rt0_go初始化</span></span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<h2 id="结束语"><a href="#结束语" class="headerlink" title="结束语"></a>结束语</h2><p>&emsp;&emsp;这里主要介绍 GPM 的一些基础概念。下一篇，将介绍 GMP 的调度。</p>
+
+    </div>
+
+    
+    
+    
+      
+<div>
+    
+        <div style="text-align:center;color: #ccc;font-size:14px;">-------------本文结束<i class="fa fa-handshake-o"></i>感谢您的阅读-------------</div>
+    
+</div>
+
+        
+      
+        
+
+<div>
+<ul class="post-copyright">
+  <li class="post-copyright-author">
+    <strong>本文作者： </strong>Vee Zhang</li>
+  <li class="post-copyright-link">
+    <strong>本文链接：</strong>
+    <a href="https://veezhang.github.io/2020/01/29/【golang源码分析】之GPM概述/" title="【golang源码分析】之GPM概述">https://veezhang.github.io/2020/01/29/【golang源码分析】之GPM概述/</a>
+  </li>
+  <li class="post-copyright-license">
+    <strong>版权声明： </strong>本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh" rel="noopener" target="_blank"><i class="fa fa-fw fa-creative-commons"></i>BY-NC-SA</a> 许可协议。转载请注明出处！</li>
+</ul>
+</div>
+
+      
+
+      <footer class="post-footer">
+          
+            
+          
+          <div class="post-tags">
+            
+              <a href="/tags/golang/" rel="tag"><i class="fa fa-tag"></i> golang</a>
+            
+              <a href="/tags/源码分析/" rel="tag"><i class="fa fa-tag"></i> 源码分析</a>
+            
+          </div>
+        
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-next post-nav-item">
+              
+                <a href="/2019/09/11/【golang源码分析】之内存管理/" rel="next" title="【golang源码分析】之内存管理">
+                  <i class="fa fa-chevron-left"></i> 【golang源码分析】之内存管理
+                </a>
+              
+            </div>
+
+            <span class="post-nav-divider"></span>
+
+            <div class="post-nav-prev post-nav-item">
+              
+                <a href="/2020/02/02/【golang源码分析】之GPM调度/" rel="prev" title="【golang源码分析】之GPM调度">
+                  【golang源码分析】之GPM调度 <i class="fa fa-chevron-right"></i>
+                </a>
+              
+            </div>
+          </div>
+        
+      </footer>
+    
+  </div>
+  
+  
+  
+  </article>
+
+  </div>
+
+
+          </div>
+          
+
+        </div>
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+        
+        
+        
+        
+      
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#进程线程协程"><span class="nav-number">1.</span> <span class="nav-text">进程线程协程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Goroutine-与线程"><span class="nav-number">2.</span> <span class="nav-text">Goroutine 与线程</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#内存占用"><span class="nav-number">2.1.</span> <span class="nav-text">内存占用</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#创建销毁"><span class="nav-number">2.2.</span> <span class="nav-text">创建销毁</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#切换代价"><span class="nav-number">2.3.</span> <span class="nav-text">切换代价</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#Thread"><span class="nav-number">2.3.1.</span> <span class="nav-text">Thread</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Goroutines"><span class="nav-number">2.3.2.</span> <span class="nav-text">Goroutines</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#早期的-GM-模型"><span class="nav-number">3.</span> <span class="nav-text">早期的 GM 模型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#GPM-模型"><span class="nav-number">4.</span> <span class="nav-text">GPM 模型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#主要结构体"><span class="nav-number">5.</span> <span class="nav-text">主要结构体</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#G"><span class="nav-number">5.1.</span> <span class="nav-text">G</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#P"><span class="nav-number">5.2.</span> <span class="nav-text">P</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#gobuf"><span class="nav-number">5.3.</span> <span class="nav-text">gobuf</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#M"><span class="nav-number">5.4.</span> <span class="nav-text">M</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#schedt"><span class="nav-number">5.5.</span> <span class="nav-text">schedt</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Global-objects"><span class="nav-number">5.6.</span> <span class="nav-text">Global objects</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#结束语"><span class="nav-number">6.</span> <span class="nav-text">结束语</span></a></li></ol></div>
+        
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image"
+      src="/uploads/v.jpeg"
+      alt="Vee Zhang">
+  <p class="site-author-name" itemprop="name">Vee Zhang</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+  <nav class="site-state motion-element">
+      <div class="site-state-item site-state-posts">
+        
+          <a href="/archives">
+        
+          <span class="site-state-item-count">8</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+    
+      
+      
+      <div class="site-state-item site-state-categories">
+        
+          
+            <a href="/categories/">
+          
+        
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">分类</span>
+        </a>
+      </div>
+    
+      
+      
+      <div class="site-state-item site-state-tags">
+        
+          
+            <a href="/tags/">
+          
+        
+        <span class="site-state-item-count">6</span>
+        <span class="site-state-item-name">标签</span>
+        </a>
+      </div>
+    
+  </nav>
+  <div class="feed-link motion-element">
+    <a href="/atom.xml" rel="alternate">
+      <i class="fa fa-rss"></i>RSS
+    </a>
+  </div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+      
+      
+        
+      
+      
+        
+      
+        <a href="https://github.com/veezhang" title="GitHub &rarr; https://github.com/veezhang" rel="noopener" target="_blank"><i class="fa fa-fw fa-github"></i>GitHub</a>
+      </span>
+    
+      <span class="links-of-author-item">
+      
+      
+        
+      
+      
+        
+      
+        <a href="/veezhang@126.com" title="E-Mail &rarr; veezhang@126.com"><i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+      </span>
+    
+  </div>
+  <div class="cc-license motion-element" itemprop="license">
+    
+  
+    <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh" class="cc-opacity" rel="noopener" target="_blank"><img src="/images/cc-by-nc-sa.svg" alt="Creative Commons"></a>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; 2019 – <span itemprop="copyrightYear">2020</span>
+  <span class="with-love" id="animate">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Vee Zhang</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+  </div>
+
+  
+
+
+    
+  
+  <script color='0,0,255' opacity='0.5' zIndex='-1' count='99' src="/lib/canvas-nest/canvas-nest.min.js"></script>
+  <script src="/lib/anime.min.js?v=3.1.0"></script>
+  <script src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  <script src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+<script src="/js/utils.js?v=7.4.0"></script><script src="/js/motion.js?v=7.4.0"></script>
+<script src="/js/schemes/pisces.js?v=7.4.0"></script>
+
+<script src="/js/next-boot.js?v=7.4.0"></script>
+
+
+
+  
+
+
+
+
+
+
+
+
+  <script src="/js/local-search.js?v=7.4.0"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+
+  <!-- 页面点击小红心 -->
+  <script type="text/javascript" src="/js/clicklove.js"></script>
+<script src="/live2dw/lib/L2Dwidget.min.js?094cbace49a39548bed64abff5988b05"></script><script>L2Dwidget.init({"log":false,"pluginJsPath":"lib/","pluginModelPath":"assets/","pluginRootPath":"live2dw/","tagMode":false});</script></body>
+</html>
